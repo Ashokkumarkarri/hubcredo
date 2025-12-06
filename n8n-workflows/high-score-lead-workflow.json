@@ -1,0 +1,139 @@
+{
+  "name": "LeadIntel - High Score Lead Alert",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "leadintel-high-score",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "leadintel-high-score"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "leadId",
+              "value": "={{$json.data.leadId}}"
+            },
+            {
+              "name": "companyName",
+              "value": "={{$json.data.companyName}}"
+            },
+            {
+              "name": "industry",
+              "value": "={{$json.data.industry}}"
+            },
+            {
+              "name": "leadScore",
+              "value": "={{$json.data.leadScore}}"
+            },
+            {
+              "name": "url",
+              "value": "={{$json.data.url}}"
+            },
+            {
+              "name": "emails",
+              "value": "={{$json.data.contacts.emails.join(', ')}}"
+            },
+            {
+              "name": "emailSubject",
+              "value": "={{$json.data.generatedEmail.subject}}"
+            },
+            {
+              "name": "emailBody",
+              "value": "={{$json.data.generatedEmail.body}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Extract Lead Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "channel": "#hot-leads",
+        "text": "=🔥 HIGH-SCORE LEAD ALERT! 🔥\n\n*Company:* {{$json.companyName}}\n*Industry:* {{$json.industry}}\n*Score:* {{$json.leadScore}}/10 ⭐\n*URL:* {{$json.url}}\n*Contacts:* {{$json.emails}}\n\n*AI-Generated Email:*\n_Subject:_ {{$json.emailSubject}}\n\n{{$json.emailBody}}\n\n🎯 *Action Required:* Review this high-priority lead immediately!\nView: https://your-app.com/leads/{{$json.leadId}}",
+        "otherOptions": {
+          "link_names": true
+        }
+      },
+      "name": "Priority Slack Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [650, 200],
+      "credentials": {
+        "slackApi": {
+          "id": "3",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "sales@yourcompany.com",
+        "subject": "=🔥 HOT LEAD: {{$json.companyName}} (Score: {{$json.leadScore}}/10)",
+        "message": "=PRIORITY LEAD ALERT\n\nA high-score lead has been identified!\n\nCompany: {{$json.companyName}}\nIndustry: {{$json.industry}}\nLead Score: {{$json.leadScore}}/10 ⭐\nURL: {{$json.url}}\nContacts: {{$json.emails}}\n\n--- AI-GENERATED EMAIL TEMPLATE ---\nSubject: {{$json.emailSubject}}\n\n{{$json.emailBody}}\n\n--- END TEMPLATE ---\n\nView full details: https://your-app.com/leads/{{$json.leadId}}\n\nACTION REQUIRED: Follow up with this lead within 24 hours.",
+        "options": {
+          "priority": "high"
+        }
+      },
+      "name": "Email Sales Team",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [650, 300],
+      "credentials": {
+        "smtp": {
+          "id": "1",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": "YOUR_SHEET_ID",
+        "range": "HotLeads!A:H",
+        "options": {
+          "valueInputMode": "USER_ENTERED"
+        }
+      },
+      "name": "Log to Hot Leads Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 2,
+      "position": [650, 400],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "2",
+          "name": "Google Sheets account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{"node": "Extract Lead Data", "type": "main", "index": 0}]]
+    },
+    "Extract Lead Data": {
+      "main": [
+        [
+          {"node": "Priority Slack Alert", "type": "main", "index": 0},
+          {"node": "Email Sales Team", "type": "main", "index": 0},
+          {"node": "Log to Hot Leads Sheet", "type": "main", "index": 0}
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "3"
+}

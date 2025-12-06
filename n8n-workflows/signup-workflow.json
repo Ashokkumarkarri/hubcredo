@@ -1,0 +1,119 @@
+{
+  "name": "LeadIntel - New User Signup",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "leadintel-signup",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "leadintel-signup"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "userId",
+              "value": "={{$json.data.userId}}"
+            },
+            {
+              "name": "name",
+              "value": "={{$json.data.name}}"
+            },
+            {
+              "name": "email",
+              "value": "={{$json.data.email}}"
+            },
+            {
+              "name": "signupDate",
+              "value": "={{$json.data.createdAt}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Extract User Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{$json.email}}",
+        "subject": "Welcome to LeadIntel AI! 🚀",
+        "message": "=Hi {{$json.name}},\n\nThanks for signing up for LeadIntel AI!\n\nYou're now ready to:\n✓ Analyze any company website\n✓ Get AI-powered insights\n✓ Extract contact information\n✓ Generate personalized cold emails\n\nGet started: https://your-app.com/dashboard\n\nBest regards,\nLeadIntel Team",
+        "options": {}
+      },
+      "name": "Send Welcome Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [650, 200],
+      "credentials": {
+        "smtp": {
+          "id": "1",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": "YOUR_SHEET_ID",
+        "range": "Users!A:D",
+        "options": {
+          "valueInputMode": "USER_ENTERED"
+        }
+      },
+      "name": "Log to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 2,
+      "position": [650, 300],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "2",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#new-signups",
+        "text": "=🎉 New User Signup!\n\n*Name:* {{$json.name}}\n*Email:* {{$json.email}}\n*Date:* {{$json.signupDate}}",
+        "otherOptions": {}
+      },
+      "name": "Post to Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [650, 400],
+      "credentials": {
+        "slackApi": {
+          "id": "3",
+          "name": "Slack account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{"node": "Extract User Data", "type": "main", "index": 0}]]
+    },
+    "Extract User Data": {
+      "main": [
+        [
+          {"node": "Send Welcome Email", "type": "main", "index": 0},
+          {"node": "Log to Google Sheets", "type": "main", "index": 0},
+          {"node": "Post to Slack", "type": "main", "index": 0}
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "1"
+}

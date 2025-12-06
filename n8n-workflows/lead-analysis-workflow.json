@@ -1,0 +1,131 @@
+{
+  "name": "LeadIntel - Lead Analysis",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "leadintel-analysis",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "leadintel-analysis"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "leadId",
+              "value": "={{$json.data.leadId}}"
+            },
+            {
+              "name": "companyName",
+              "value": "={{$json.data.companyName}}"
+            },
+            {
+              "name": "industry",
+              "value": "={{$json.data.industry}}"
+            },
+            {
+              "name": "leadScore",
+              "value": "={{$json.data.leadScore}}"
+            },
+            {
+              "name": "url",
+              "value": "={{$json.data.url}}"
+            },
+            {
+              "name": "emails",
+              "value": "={{$json.data.contacts.emails.join(', ')}}"
+            },
+            {
+              "name": "analyzedAt",
+              "value": "={{$json.data.analyzedAt}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Extract Lead Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "sheetId": "YOUR_SHEET_ID",
+        "range": "Leads!A:G",
+        "options": {
+          "valueInputMode": "USER_ENTERED"
+        }
+      },
+      "name": "Log to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 2,
+      "position": [650, 200],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "2",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "channel": "#lead-analysis",
+        "text": "=📊 New Lead Analyzed!\n\n*Company:* {{$json.companyName}}\n*Industry:* {{$json.industry}}\n*Score:* {{$json.leadScore}}/10\n*URL:* {{$json.url}}\n*Contacts:* {{$json.emails}}\n\nView details: https://your-app.com/leads/{{$json.leadId}}",
+        "otherOptions": {}
+      },
+      "name": "Notify Slack",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 1,
+      "position": [650, 300],
+      "credentials": {
+        "slackApi": {
+          "id": "3",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "team@yourcompany.com",
+        "subject": "=New Lead: {{$json.companyName}} (Score: {{$json.leadScore}}/10)",
+        "message": "=A new lead has been analyzed:\n\nCompany: {{$json.companyName}}\nIndustry: {{$json.industry}}\nLead Score: {{$json.leadScore}}/10\nURL: {{$json.url}}\nContacts Found: {{$json.emails}}\n\nView full details: https://your-app.com/leads/{{$json.leadId}}",
+        "options": {}
+      },
+      "name": "Email Summary",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [650, 400],
+      "credentials": {
+        "smtp": {
+          "id": "1",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{"node": "Extract Lead Data", "type": "main", "index": 0}]]
+    },
+    "Extract Lead Data": {
+      "main": [
+        [
+          {"node": "Log to Google Sheets", "type": "main", "index": 0},
+          {"node": "Notify Slack", "type": "main", "index": 0},
+          {"node": "Email Summary", "type": "main", "index": 0}
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "2"
+}
