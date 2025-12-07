@@ -142,8 +142,8 @@ router.post('/analyze', protect, urlValidation, validate, async (req, res, next)
     await lead.save();
 
     // Step 7: Trigger n8n webhooks
-    await n8nWebhook.triggerLeadAnalysis(lead);
-    await n8nWebhook.triggerHighScoreLead(lead);
+    // await n8nWebhook.triggerLeadAnalysis(lead);
+    // await n8nWebhook.triggerHighScoreLead(lead);
 
     res.status(201).json({
       success: true,
