@@ -6,6 +6,7 @@ const { urlValidation, validate } = require('../utils/validation');
 const firecrawlService = require('../services/firecrawl');
 const geminiService = require('../services/gemini');
 const n8nWebhook = require('../services/n8nWebhook');
+const serpApiService = require('../services/serpApiService');
 
 // @route   POST /api/leads/analyze
 // @desc    Analyze a website URL
@@ -39,6 +40,31 @@ router.post('/analyze', protect, urlValidation, validate, async (req, res, next)
     };
 
     // Step 3: Analyze company with Gemini AI
+    // We can also fetch SerpAPI data here to help or just merge later
+    let serpData = {};
+    if (process.env.SERPAPI_KEY) {
+        try {
+            // Use domain from URL as initial query
+            let query = url;
+            try { query = new URL(url).hostname; } catch(e) {}
+            
+            serpData = await serpApiService.searchCompany(query);
+            
+            // Merge SerpAPI social links with scraped ones
+            if (serpData.socialLinks && serpData.socialLinks.length > 0) {
+               const combined = new Set([...socialLinks, ...serpData.socialLinks]);
+               socialLinks.splice(0, socialLinks.length, ...Array.from(combined));
+            }
+        } catch (err) {
+            console.error('Auto-enrichment failed:', err.message);
+            // Continue without it
+        }
+    }
+
+
+
+    // Step 3a: Analyze company with Gemini AI
+    // Pass serpData to Gemini if useful, or just merge results after
     const analysisResult = await geminiService.analyzeCompany(scrapedData);
     const companyData = analysisResult.data;
 
@@ -69,12 +95,51 @@ router.post('/analyze', protect, urlValidation, validate, async (req, res, next)
         keyFeatures: companyData.keyFeatures || [],
       },
       generatedEmail,
+      generatedEmail,
       scrapedContent: {
         title: scrapedData.title,
         description: scrapedData.description,
         metadata: scrapedData.metadata,
       },
+      keyPeople: serpData.keyPeople || [],
     });
+
+    // Post-creation merge for better accuracy if Gemini failed or was vague
+    if (serpData.location && (lead.location === 'Unknown' || !lead.location)) {
+        lead.location = serpData.location;
+    }
+    if (serpData.rating) {
+        if (!lead.aiInsights) lead.aiInsights = {};
+        lead.aiInsights.rating = serpData.rating;
+        lead.aiInsights.reviews = serpData.reviews;
+    }
+    await lead.save();
+
+    // Merge SerpAPI data that wasn't part of contacts
+    if (serpData.location && !lead.location) lead.location = serpData.location;
+    if (serpData.snippet && !lead.summary) lead.summary = serpData.snippet;
+    if (serpData.website && !lead.url) lead.url = serpData.website;
+    
+    // Add rating if available
+    if (serpData.rating) {
+        if (!lead.aiInsights) lead.aiInsights = {};
+        lead.aiInsights.rating = serpData.rating;
+        lead.aiInsights.reviews = serpData.reviews;
+    }
+    
+    if (serpData.keyPeople && serpData.keyPeople.length > 0) {
+        // Merge people (simple overwrite or append? overwrite for now as it's cleaner)
+        if (!lead.keyPeople) lead.keyPeople = [];
+        // Add new people avoiding duplicates by name
+        const existingNames = new Set(lead.keyPeople.map(p => p.name));
+        serpData.keyPeople.forEach(p => {
+            if (!existingNames.has(p.name)) {
+                lead.keyPeople.push(p);
+            }
+        });
+    }
+
+    await lead.save();
 
     // Step 7: Trigger n8n webhooks
     await n8nWebhook.triggerLeadAnalysis(lead);
@@ -169,6 +234,38 @@ router.get('/', protect, async (req, res, next) => {
   }
 });
 
+// @route   GET /api/leads/stats/overview
+// @desc    Get user's lead statistics
+// @access  Private
+router.get('/stats/overview', protect, async (req, res, next) => {
+  try {
+    const totalLeads = await Lead.countDocuments({ userId: req.user._id });
+    
+    const avgScoreResult = await Lead.aggregate([
+      { $match: { userId: req.user._id } },
+      { $group: { _id: null, avgScore: { $avg: '$leadScore' } } },
+    ]);
+
+    const avgScore = avgScoreResult.length > 0 ? avgScoreResult[0].avgScore : 0;
+
+    const highScoreLeads = await Lead.countDocuments({
+      userId: req.user._id,
+      leadScore: { $gte: 8 },
+    });
+
+    res.status(200).json({
+      success: true,
+      data: {
+        totalLeads,
+        avgScore: Math.round(avgScore * 10) / 10,
+        highScoreLeads,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // @route   GET /api/leads/:id
 // @desc    Get single lead by ID
 // @access  Private
@@ -221,37 +318,7 @@ router.delete('/:id', protect, async (req, res, next) => {
   }
 });
 
-// @route   GET /api/leads/stats/overview
-// @desc    Get user's lead statistics
-// @access  Private
-router.get('/stats/overview', protect, async (req, res, next) => {
-  try {
-    const totalLeads = await Lead.countDocuments({ userId: req.user._id });
-    
-    const avgScoreResult = await Lead.aggregate([
-      { $match: { userId: req.user._id } },
-      { $group: { _id: null, avgScore: { $avg: '$leadScore' } } },
-    ]);
 
-    const avgScore = avgScoreResult.length > 0 ? avgScoreResult[0].avgScore : 0;
-
-    const highScoreLeads = await Lead.countDocuments({
-      userId: req.user._id,
-      leadScore: { $gte: 8 },
-    });
-
-    res.status(200).json({
-      success: true,
-      data: {
-        totalLeads,
-        avgScore: Math.round(avgScore * 10) / 10,
-        highScoreLeads,
-      },
-    });
-  } catch (error) {
-    next(error);
-  }
-});
 
 const emailService = require('../services/emailService');
 
@@ -291,6 +358,75 @@ router.post('/send-email', protect, async (req, res, next) => {
     res.status(200).json({
       success: true,
       message: 'Email sent successfully via Backend!',
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @route   POST /api/leads/:id/enrich
+// @desc    Enrich lead data using SerpAPI
+// @access  Private
+router.post('/:id/enrich', protect, async (req, res, next) => {
+  try {
+    const lead = await Lead.findOne({ _id: req.params.id, userId: req.user._id });
+    if (!lead) {
+      return res.status(404).json({ success: false, message: 'Lead not found' });
+    }
+
+    // Use company name or extracting domain from URL as query
+    let query = lead.companyName;
+    if (!query && lead.url) {
+        try {
+            query = new URL(lead.url).hostname;
+        } catch (e) {
+            query = lead.url;
+        }
+    }
+    
+    if (!query) {
+        return res.status(400).json({ success: false, message: 'No company name or URL to search' });
+    }
+
+    const enrichedData = await serpApiService.searchCompany(query);
+
+    // Merge social links
+    if (enrichedData.socialLinks && enrichedData.socialLinks.length > 0) {
+        const existingLinks = new Set(lead.contacts.socialLinks || []);
+        enrichedData.socialLinks.forEach(link => existingLinks.add(link));
+        lead.contacts.socialLinks = Array.from(existingLinks);
+    }
+    
+    if (enrichedData.location && !lead.location) lead.location = enrichedData.location;
+    if (enrichedData.snippet && !lead.summary) lead.summary = enrichedData.snippet;
+    
+    // Store extra metadata in aiInsights if needed, or just keep it simple
+    if (enrichedData.rating) {
+        if (!lead.aiInsights) lead.aiInsights = {};
+        lead.aiInsights.rating = enrichedData.rating;
+        lead.aiInsights.reviews = enrichedData.reviews;
+    }
+
+    // Extract emails from snippets if possible (simple regex lookup could be added in service, but let's stick to what we have)
+
+
+
+    if (enrichedData.keyPeople && enrichedData.keyPeople.length > 0) {
+        if (!lead.keyPeople) lead.keyPeople = [];
+        const existingNames = new Set(lead.keyPeople.map(p => p.name));
+        enrichedData.keyPeople.forEach(p => {
+            if (!existingNames.has(p.name)) {
+                lead.keyPeople.push(p);
+            }
+        });
+    }
+
+    await lead.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Lead enriched successfully',
+      data: { lead }
     });
   } catch (error) {
     next(error);

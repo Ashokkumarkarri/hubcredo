@@ -4,7 +4,7 @@ const { ANALYSIS_PROMPT_TEMPLATE, EMAIL_PROMPT_TEMPLATE } = require('../utils/pr
 class GeminiService {
   constructor() {
     this.genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    this.model = this.genAI.getGenerativeModel({ model: 'gemini-pro' });
+    this.model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash-001' });
   }
 
   async analyzeCompany(scrapedData) {

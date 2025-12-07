@@ -24,6 +24,7 @@ const LeadsPage = () => {
 
   useEffect(() => {
     if (leadId) {
+      console.log('Fetching lead detail for:', leadId);
       fetchLeadById(leadId);
     } else {
       setSelectedLead(null);
@@ -50,6 +51,7 @@ const LeadsPage = () => {
       setSelectedLead(response.data.data.lead);
     } catch (error) {
       console.error('Failed to fetch lead:', error);
+      setError('Failed to load lead details. ' + (error.response?.data?.message || error.message));
       // If fetching detail fails, maybe go back to list?
       // For now just stay on page, maybe show alert
     }
@@ -74,6 +76,21 @@ const LeadsPage = () => {
     } catch (error) {
       console.error('Failed to send email:', error);
       alert('Failed to send email. Please try again.');
+    }
+  };
+
+  const handleEnrichLead = async () => {
+    try {
+      if (!selectedLead) return;
+      setLoading(true); // Maybe use a separate loading state or local one
+      const response = await leadsAPI.enrich(selectedLead._id);
+      setSelectedLead(response.data.data.lead); // Update local state with enriched lead
+      alert('Lead enriched successfully! 🎉');
+    } catch (error) {
+      console.error('Failed to enrich lead:', error);
+      alert('Failed to enrich lead. ' + (error.response?.data?.message || 'Unknown error'));
+    } finally {
+        setLoading(false);
     }
   };
 
@@ -141,9 +158,19 @@ const LeadsPage = () => {
                 <h1 className="text-3xl font-bold">{selectedLead.companyName}</h1>
                 <p className="text-gray-400 mt-1">{selectedLead.url}</p>
               </div>
-              <div className="text-right">
+                <div className="text-right">
                 <div className="text-4xl font-bold text-primary-400">{selectedLead.leadScore}/10</div>
                 <div className="text-gray-500 text-sm">Lead Score</div>
+                
+                {selectedLead.aiInsights?.rating && (
+                   <div className="mt-2 text-sm text-yellow-500">
+                      ⭐ {selectedLead.aiInsights.rating} ({selectedLead.aiInsights.reviews || 0} reviews)
+                   </div>
+                )}
+
+                <Button variant="secondary" className="mt-2 text-sm" onClick={handleEnrichLead}>
+                    ✨ Enrich Lead
+                </Button>
               </div>
             </div>
             
@@ -173,6 +200,33 @@ const LeadsPage = () => {
                 ))}
                 {selectedLead.contacts.phones?.map((phone, i) => (
                   <div key={i} className="text-gray-300">{phone}</div>
+                ))}
+              </div>
+            </Card>
+          )}
+          
+          {/* Key People */}
+          {selectedLead.keyPeople?.length > 0 && (
+            <Card>
+              <h2 className="text-xl font-bold mb-4">👥 People You Can Reach Out To</h2>
+              <div className="grid md:grid-cols-2 gap-4">
+                {selectedLead.keyPeople.map((person, i) => (
+                  <div key={i} className="flex items-center justify-between p-3 bg-gray-800/50 rounded-lg">
+                    <div>
+                      <div className="font-semibold text-white">{person.name}</div>
+                      <div className="text-gray-400 text-sm">{person.role}</div>
+                    </div>
+                    {person.link && (
+                      <a 
+                        href={person.link} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-primary-400 hover:text-primary-300 text-sm"
+                      >
+                        view profile →
+                      </a>
+                    )}
+                  </div>
                 ))}
               </div>
             </Card>

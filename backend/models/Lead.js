@@ -41,6 +41,11 @@ const leadSchema = new mongoose.Schema({
     phones: [String],
     socialLinks: [String],
   },
+  keyPeople: [{
+    name: String,
+    role: String,
+    link: String
+  }],
   techStack: [String],
   services: [String],
   painPoints: [String],

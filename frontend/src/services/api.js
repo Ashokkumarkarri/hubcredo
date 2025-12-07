@@ -47,6 +47,7 @@ export const authAPI = {
 // Leads API
 export const leadsAPI = {
   analyze: (url) => api.post('/api/leads/analyze', { url }),
+  enrich: (id) => api.post(`/api/leads/${id}/enrich`),
   getAll: (params) => api.get('/api/leads', { params }),
   getById: (id) => api.get(`/api/leads/${id}`),
   delete: (id) => api.delete(`/api/leads/${id}`),
