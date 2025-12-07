@@ -34,7 +34,7 @@ router.post('/signup', signupValidation, validate, async (req, res, next) => {
     const token = generateToken(user._id);
 
     // Send welcome email (Direct Backend)
-    await emailService.sendWelcomeEmail(user);
+    // await emailService.sendWelcomeEmail(user);
 
     // Trigger n8n webhook (for logging/other integrations)
     await n8nWebhook.triggerSignup(user);
